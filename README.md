@@ -14,7 +14,9 @@ NeuralNetwork nn(layersSize, loss_function, activation_function, learning_rate);
 
 | Parameter | Type | Description |
 | :--- | :--- | :--- |
-| `layersSize` | `vector<int>` | Defines the architecture of the network (Input -> Hidden -> Output). Example: `{2, 4, 5, 1}` creates a network with 2 input nodes, 4-nodes hidden layer, 5-nodes hidden layer and automatically appends a 1-node output layer if it is not explicitly provided. |
+| `layersSize` | `vector<int>` | Defines the architecture of the network (Input -> Hidden -> Output). Example: `{2, 4, 5, 1}` creates a network with 2 input nodes, 4-nodes hidden layer, 5-nodes hidden layer and automatically appends a 1-node output layer if it is not explicitly provided. 
+Each layer is 'fully connected' with the next one
+Each layer has a single bias connceted to all neurons of the next one |
 | `loss` | `Loss*` | A pointer to the loss function object (e.g., `new MSE()`). |
 | `activation` | `Activation*` | A pointer to the activation function object (e.g., `new Relu()` or `new Linear()`). |
 | `lr` | `double` | The learning rate for weight updates during Stochastic Gradient Descent. |
