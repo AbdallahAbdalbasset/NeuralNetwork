@@ -8,6 +8,7 @@ To instantiate the neural network, use the `NeuralNetwork` constructor.
 
 ```cpp
 NeuralNetwork nn(layersSize, loss_function, activation_function, learning_rate);
+```
 
 Constructor Parameters
 layersSize (vector<int>): Defines the architecture of the network (Input -> Hidden -> Output).
