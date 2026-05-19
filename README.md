@@ -39,6 +39,7 @@ Behavior: Compares the previous forward pass output to the target, computes the 
 Example Usage: Learning the AND Gate
 Here is a complete example of how to initialize, train, and test the network using a simple dataset.
 
+```cpp
 #include "bits/stdc++.h"
 // ... (include the provided classes here)
 
