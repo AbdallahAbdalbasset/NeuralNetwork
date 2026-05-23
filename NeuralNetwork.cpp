@@ -4,6 +4,7 @@ using namespace std;
 struct Node {
     double val = 1;
     double grad = 0;
+    double velocity = 0;
 };
 
 class Activation{
@@ -18,14 +19,11 @@ public:
     virtual double backProp(double o, double t) = 0;
 };
 
-class MSE : public Loss {
-    double forward(double o, double t){
-        return ((o - t) * (o - t)) / 2.0;
-    }
-    
-    double backProp(double o, double t){
-        return o - t;
-    }
+class Optimizer{
+public:
+    vector<vector<vector<Node>>>& weights;
+    Optimizer(vector<vector<vector<Node>>>& weights) : weights(weights) {}
+    virtual void step() = 0;
 };
 
 class Linear : public Activation{
@@ -48,36 +46,75 @@ class Relu : public Activation{
     }
 };
 
+class MSE : public Loss {
+    double forward(double o, double t){
+        return ((o - t) * (o - t)) / 2.0;
+    }
+    
+    double backProp(double o, double t){
+        return o - t;
+    }
+};
+
+class SGD : public Optimizer{
+    double lr;
+public:
+    SGD(vector<vector<vector<Node>>>& weights, double lr) : Optimizer(weights), lr(lr){}
+    void step(){
+        for(auto&i:weights){
+            for(auto&j:i){
+                for(auto&k:j){
+                    k.val -= lr * k.grad;
+                }
+            }
+        }
+    }
+};
+
+class MomentumSGD : public Optimizer{
+    double mc;
+    double lr;
+public:
+    MomentumSGD(vector<vector<vector<Node>>>& weights, double lr, double mc) : Optimizer(weights), lr(lr), mc(mc){
+    }
+    void step(){
+        for(auto&i:weights){
+            for(auto&j:i){
+                for(auto&k:j){
+                    k.velocity = mc*k.velocity - lr * k.grad;
+                    k.val = k.val + k.velocity;
+                }
+            }
+        }
+    }
+};
+
 class NeuralNetwork{
 public:
     Loss* loss;
     Activation* activation;
     vector<vector<Node>> layers;
     vector<vector<vector<Node>>> weights;
-    double lr;
         
-    NeuralNetwork(vector<int> layersSize, Loss* loss, Activation* activation, double lr) : loss(loss), activation(activation), lr(lr) {
+    NeuralNetwork(vector<int> layersSize, Loss* loss, Activation* activation) : loss(loss), activation(activation){
         if(!layersSize.size() || !loss || !activation) {
             cout<<"Invalid Network"<<endl;
             return;
         }
-        
-        // Force Single Out Layer
-        if(layersSize.back() != 1) layersSize.push_back(1);
-        
+                
         // Allocate Weights and Layers
         for(int i = 0;i+1<layersSize.size();i++){
             weights.push_back(vector<vector<Node>>(layersSize[i]+1, vector<Node>(layersSize[i+1])));
             layers.push_back(vector<Node>(layersSize[i]));
         }
+        layers.push_back(vector<Node>(layersSize.back()));
         
-        layers.push_back(vector<Node>(1));
     }
     
-    double forward(vector<double> input){
+    vector<double> forward(vector<double> input){
         if(input.size() != layers[0].size()){
             cout<<"Invalid Input"<<endl;
-            return 0.0;
+            return {};
         }
         
         // Initialize Input Layer
@@ -98,12 +135,21 @@ public:
             }
         }
         
-        return layers.back()[0].val;
+        // Return vector of outputs
+        vector<double> res(layers.back().size());
+        for(int i = 0;i<res.size();i++) res[i] = layers.back()[i].val;
+        return res;
     }
     
-    void backProp(double target){
+    void backProp(vector<double> target){
+        if(target.size() != layers.back().size()){
+            cout<<"Target size does not mach the NN output"<<endl;
+            return;
+        }
         
-        layers.back()[0].grad = loss->backProp(layers.back()[0].val, target);
+        for(int i = 0;i<layers.back().size();i++){
+            layers.back()[i].grad = loss->backProp(layers.back()[i].val, target[i])/layers.back().size();
+        }
         
         // Calc grad for each layer
         for(int i = (int)layers.size() - 2;i>=0;i--){
@@ -113,7 +159,6 @@ public:
                 for(int k = 0;k<layers[i+1].size();k++){
                     layers[i][j].grad += layers[i+1][k].grad*weights[i][j][k].val;
                     weights[i][j][k].grad = layers[i][j].val*layers[i+1][k].grad;
-                    weights[i][j][k].val -= lr * weights[i][j][k].grad;
                 }
                 
                 layers[i][j].grad *= activation->backProp(layers[i][j].val);
@@ -121,7 +166,7 @@ public:
             
             // Bias grad
             for(int k = 0;k<layers[i+1].size();k++){
-                weights[i][layers[i].size()][k].val -= lr * layers[i+1][k].grad;
+                weights[i][layers[i].size()][k].grad = layers[i+1][k].grad;
             }
         }
     }
@@ -132,23 +177,25 @@ public:
 int main(){
     // Data
     vector<vector<double>> X = {{0, 0}, {0, 1}, {1, 0}, {1, 1}};
-    vector<double> Y = {0, 0, 0, 1};
+    vector<vector<double>> Y = {{0,0}, {0,1}, {0,2}, {1,3}};
     
     // Create Neural Network
-    NeuralNetwork nn({2,1}, new MSE(), new Relu(), 0.01);
-    
+    NeuralNetwork nn({2,2}, new MSE(), new Relu());
+    MomentumSGD msgd(nn.weights, 0.01, 0.9);
     // Training
     srand(1);
     for(int i = 0;i<40000;i++){
         int idx = rand()%4;
         nn.forward(X[idx]);
         nn.backProp(Y[idx]);
+        msgd.step();
     }
     
     // Test
     for(int i = 0;i < 4;i++) {
         cout<<"Sample: "<<i+1<<endl;
-        cout<<"Data: ("<<X[i][0]<<","<<X[i][1]<<")   Target "<<Y[i]<<"  Prediction: "<<nn.forward(X[i])<<endl;
+        auto res = nn.forward(X[i]);
+        cout<<"Data: ("<<X[i][0]<<","<<X[i][1]<<") Prediction: "<<res[0]<<" "<<res[1]<<endl;
     }
 }
     
