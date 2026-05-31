@@ -23,18 +23,16 @@ double randomWeight(){
     return ((double)rand() / RAND_MAX - 0.5) * 0.1;
 }
 
-class Activation
-{
+class Activation {
 public:
     virtual double forward(double x) = 0;
     virtual double backProp(double x) = 0;
 };
 
-class Loss
-{
+class Loss {
 public:
-    virtual double forward(double o, double t) = 0;
-    virtual double backProp(double o, double t) = 0;
+    virtual double forward(const vector<double>& o, const vector<double>& t) = 0;
+    virtual void backProp(vector<Neuron>& lastLayer, const vector<double>& target) = 0;
 };
 
 class Optimizer
@@ -45,45 +43,73 @@ public:
     virtual void step() = 0;
 };
 
-class Linear : public Activation
-{
+class Linear : public Activation {
 public:
-    double forward(double x)
-    {
-        return x;
+    double forward(double x) override { return x; }
+    double backProp(double x) override { return 1.0; }
+};
+
+class Relu : public Activation {
+public:
+    double forward(double x) override { return max(0.0, x); }
+    double backProp(double x) override { return x > 0 ? 1.0 : 0.0; }
+};
+
+class MSE : public Loss {
+public:
+    double forward(const vector<double>& o, const vector<double>& t) override {
+        double loss = 0;
+        double N = o.size();
+        for (int i = 0; i < N; i++) {
+            loss += ((o[i] - t[i]) * (o[i] - t[i])) / 2.0;
+        }
+        return loss / N;
     }
 
-    double backProp(double x)
-    {
-        return 1;
+    void backProp(vector<Neuron>& lastLayer, const vector<double>& target) override {
+        double N = lastLayer.size();
+        for (int i = 0; i < N; i++) {
+            lastLayer[i].grad = (lastLayer[i].outVal - target[i]) / N;
+        }
     }
 };
 
-class Relu : public Activation
-{
+class SoftmaxCrossEntropy : public Loss {
 public:
-    double forward(double x)
-    {
-        return max(0.0, x);
+    double forward(const vector<double>& o, const vector<double>& t) override {
+        // 1. Find max for numerical stability
+        double maxVal = o[0];
+        for (double val : o) maxVal = max(maxVal, val);
+
+        // 2. Calculate Softmax probabilities and Cross Entropy Loss together
+        double sumExp = 0.0;
+        for (double val : o) sumExp += exp(val - maxVal);
+
+        double loss = 0;
+        for (int i = 0; i < o.size(); i++) {
+            double prob = exp(o[i] - maxVal) / sumExp;
+            loss -= t[i] * log(prob + 1e-9);
+        }
+        return loss;
     }
 
-    double backProp(double x)
-    {
-        return x > 0 ? 1.0 : 0.0;
-    }
-};
+    void backProp(vector<Neuron>& lastLayer, const vector<double>& target) override {
+        // 1. Calculate Softmax probabilities
+        double maxVal = lastLayer[0].outVal; // Last layer contains raw Linear outputs
+        for (const auto& n : lastLayer) maxVal = max(maxVal, n.outVal);
 
-class MSE : public Loss
-{
-public:
-    double forward(double o, double t)
-    {
-        return ((o - t) * (o - t)) / 2.0;
-    }
+        double sumExp = 0.0;
+        vector<double> probs(lastLayer.size());
+        for (int i = 0; i < lastLayer.size(); i++) {
+            probs[i] = exp(lastLayer[i].outVal - maxVal);
+            sumExp += probs[i];
+        }
 
-    double backProp(double o, double t)
-    {
-        return o - t;
+        // 2. Assign gradients: (Probability - Target)
+        for (int i = 0; i < lastLayer.size(); i++) {
+            probs[i] /= sumExp;
+            lastLayer[i].grad = (probs[i] - target[i]);
+        }
     }
 };
 
@@ -135,13 +161,13 @@ class NeuralNetwork
 {
 public:
     Loss *loss;
-    Activation *activation;
+    vector<Activation*> activations;
     vector<vector<Neuron>> layers;
     vector<vector<vector<Weight>>> weights;
 
-    NeuralNetwork(vector<int> layersSize, Loss *loss, Activation *activation) : loss(loss), activation(activation)
+    NeuralNetwork(vector<int> layersSize, Loss *loss, vector<Activation*> activations) : loss(loss), activations(activations)
     {
-        if (!layersSize.size() || !loss || !activation){
+        if (!layersSize.size() || !loss || activations.size() != layersSize.size() - 1){
             cout << "Invalid Network" << endl;
             return;
         }
@@ -195,7 +221,7 @@ public:
 
                 // Add bias
                 layers[i][j].netVal += weights[i - 1][layers[i - 1].size()][j].val;
-                layers[i][j].outVal = activation->forward(layers[i][j].netVal);
+                layers[i][j].outVal = activations[i-1]->forward(layers[i][j].netVal);
             }
         }
 
@@ -214,10 +240,10 @@ public:
             return;
         }
 
-        for (int i = 0; i < layers.back().size(); i++)
-        {
-            layers.back()[i].grad = loss->backProp(layers.back()[i].outVal, target[i]) / layers.back().size();
-            layers.back()[i].grad *= activation->backProp(layers.back()[i].netVal);
+        // Last layer grad
+        loss->backProp(layers.back(), target);
+        for (int i = 0; i < layers.back().size(); i++){ 
+            layers.back()[i].grad *= activations.back()->backProp(layers.back()[i].netVal);
         }
 
         // Calc grad for each layer
@@ -232,7 +258,7 @@ public:
                     layers[i][j].grad += layers[i + 1][k].grad * weights[i][j][k].val;
                     weights[i][j][k].grad = layers[i][j].outVal * layers[i + 1][k].grad;
                 }
-                if(i > 0) layers[i][j].grad *= activation->backProp(layers[i][j].netVal);
+                if(i > 0) layers[i][j].grad *= activations[i-1]->backProp(layers[i][j].netVal);
             }
 
             // Bias grad
@@ -373,7 +399,7 @@ int main()
         "t10k-labels-idx1-ubyte"
     );
 
-    NeuralNetwork nn({28*28, 10}, new MSE(), new Relu());
+    NeuralNetwork nn({28*28, 10}, new MSE(), {new Relu()});
     MomentumSGD sgd(nn.weights, 0.001, 0.9);
 
     std::mt19937 rng(std::random_device{}());
