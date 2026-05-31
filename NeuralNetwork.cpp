@@ -399,14 +399,24 @@ int main()
         "t10k-labels-idx1-ubyte"
     );
 
-    NeuralNetwork nn({28*28, 10}, new MSE(), {new Relu()});
+    NeuralNetwork nn({28*28, 128, 10}, new SoftmaxCrossEntropy(), {new Relu(), new Linear()});
     MomentumSGD sgd(nn.weights, 0.001, 0.9);
 
     std::mt19937 rng(std::random_device{}());
-    for(int epoch = 0; epoch < 10;epoch++){
+    for(int epoch = 0; epoch < 2;epoch++){
         vector<int> idx(trainData.images.size());
         iota(idx.begin(), idx.end(), 0);
         shuffle(idx.begin(), idx.end(), rng);
+
+        // Testing
+        int correct = 0;
+        for(int j = 0;j<testData.images.size();j++){
+            auto res = nn.forward(testData.images[j]);      
+            auto idx = max_element(res.begin(), res.end()) - res.begin();
+            correct += idx == testData.labels[j];
+        }
+        cout<<"Accuracy: " <<100.0*correct/testData.images.size()<<endl;
+
 
         for(int i = 0;i < trainData.images.size();i++){
             nn.forward(trainData.images[idx[i]]);
