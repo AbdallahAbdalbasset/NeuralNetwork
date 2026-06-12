@@ -437,10 +437,12 @@ int main()
     NeuralNetwork nn({28*28, 256, 128, 10}, new SoftmaxCrossEntropy(), {new Relu(), new Relu(), new Linear()});
     MomentumSGD sgd(nn.weights, 0.001, 0.9);
 
+    // Used for Data shuffling
     std::mt19937 rng(std::random_device{}());
     vector<int> idx(trainData.images.size());
     iota(idx.begin(), idx.end(), 0);
     for(int epoch = 0; epoch < 10;epoch++){
+        // Shuffling data
         shuffle(idx.begin(), idx.end(), rng);
 
         for(int i = 0;i < trainData.images.size();i++){
