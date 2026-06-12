@@ -1,113 +1,104 @@
-# C++ Neural Network from Scratch
+# C++ Neural Network Library
 
-A lightweight, purely object-oriented, and highly modular Artificial Neural Network implemented in C++ from scratch with zero external dependencies. Designed for efficiency and extensibility, this framework cleanly separates components into decoupled layers, custom activation functions, loss abstractions, and advanced optimization algorithms.
+A lightweight, dependency-free Neural Network library written entirely in C++ from scratch. This project provides a flexible architecture to build, train, and test multi-layer perceptrons (MLPs). It includes support for various activation functions, loss functions, optimizers, and features a built-in data loader for the MNIST dataset.
 
-The included driver application demonstrates the network's capabilities by training on the classic **MNIST Handwritten Digit Dataset**, achieving high-performance execution via aggressive compiler optimizations.
+## Features
 
----
-
-## Key Features
-
-* **Modular Components:** Easily implement and swap custom activation functions, loss metrics, or optimization strategies via clean abstract base classes.
-* **Advanced Optimization:** Includes standard Stochastic Gradient Descent (SGD) and **Momentum-based SGD** to accelerate convergence and navigate tricky error surfaces.
-* **Numerical Stability:** The `SoftmaxCrossEntropy` loss implements the log-sum-exp trick implicitly during propagation to safely handle potential floating-point overflow/underflow.
-* **Serialization:** Full built-in support to save trained network state models (`saveNNtoFile`) and hot-load weights (`loadFromFile`) later for inference.
-* **MNIST Pipeline Built-in:** Includes a raw binary parser for IDX-formatted datasets and a PGM image exporter to visually audit dataset contents.
+* **Dynamic Architecture:** Easily define networks with any number of hidden layers and node sizes.
+* **Activations:** ReLU, Linear.
+* **Loss Functions:** Mean Squared Error (MSE), Softmax with Cross-Entropy (optimized for numerical stability).
+* **Optimizers:** Stochastic Gradient Descent (SGD), Momentum SGD.
+* **I/O Operations:** Save trained weights to a text file and load them for later inference.
+* **No External Dependencies:** Only relies on the C++ Standard Library.
 
 ---
 
-## Project Architecture
+## 🚀 Getting Started
 
-The library splits network components into clear, intuitive data structures and polymorphic classes:
-
-### Core Data Layout
-* **`Weight` Struct:** Tracks its current value, raw analytical gradient, and historical velocity vector (crucial for momentum calculations).
-* **`Neuron` Struct:** Tracks pre-activation sums (`netVal`), post-activation outputs (`outVal`), and node-level local error gradients (`grad`).
-
-### Class Hierarchy
-| Component | Supported Types | Description |
-| :--- | :--- | :--- |
-| **`Activation`** | `Linear`, `Relu` | Intercepts node-level sums during forward and backward passes. |
-| **`Loss`** | `MSE`, `SoftmaxCrossEntropy` | Calculates scalar loss evaluations and seeds final layer error configurations. |
-| **`Optimizer`** | `SGD`, `MomentumSGD` | Walks the parameter space using decoupled weight/gradient references. |
-
----
-
-## Quick Start & Usage
-
-### 1. Prerequisites
-Before running, ensure you have downloaded the raw MNIST dataset files and placed them directly into the root folder of your project workspace:
-* `train-images-idx3-ubyte` (Training Images)
-* `train-labels-idx1-ubyte` (Training Labels)
-* `t10k-images-idx3-ubyte` (Testing Images)
-* `t10k-labels-idx1-ubyte` (Testing Labels)
-
-### 2. Setup Options
-
-#### Option A: Running the Pre-compiled Binary
-If you are using the pre-compiled executable provided inside the repository workspace, you can execute it immediately:
-
+### 1. Clone the Repository
+To get a local copy up and running, clone the repository using Git:
 ```bash
-# Give it execution privileges if necessary (Linux/macOS)
-chmod +x out
-
-# Execute the pre-compiled binary
-./out
+git clone [https://github.com/yourusername/your-repo-name.git](https://github.com/yourusername/your-repo-name.git)
+cd your-repo-name
 ```
+*(Note: Replace `yourusername` and `your-repo-name` with your actual GitHub details).*
 
-#### Option B: Compiling from Source
-To compile the implementation files yourself, use the high-performance compilation string optimized for maximum vectorization and hardware optimization:
-
+### 2. Compilation
+Because the library heavily relies on matrix multiplications and loops, it is highly recommended to compile with optimization flags. Run the following command in your terminal:
 ```bash
 g++ -O3 -march=native -ffast-math -std=c++17 NeuralNetwork.cpp -o out
+```
+
+### 3. Execution
+Once compiled, you can run the pre-compiled executable (or the one you just built) using:
+```bash
 ./out
 ```
 
 ---
 
-## Network Instantiation & Example
+## 🧠 Core Functions Explained
 
-The following code details how to structure a network topology using your custom architectural parameters, train it on data matrices, and output model checkpoints:
+Understanding the underlying mechanics of the network is straightforward. The library relies on three main operations during the training loop:
 
-```cpp
-// 1. Define Topology: 784 Inputs (28x28 pixels), two hidden layers, and 10 Output classes
-vector<int> topology = {784, 256, 128, 10};
+### `forward(vector<double>& input)`
+* **What it does:** Calculates the forward pass (predictions) of the network.
+* **How it works:** 1. It takes an input vector and feeds it into the first layer.
+  2. For each subsequent layer, it calculates the dot product of the previous layer's outputs and the connecting weights, then adds the bias. 
+  3. This raw sum (`netVal`) is passed through the layer's activation function to produce the output (`outVal`).
+  4. Crucially, these values are **stored inside each neuron**, which is required later for calculating gradients during backpropagation.
 
-// 2. Map Activation instances per layer transition (3 transitions total)
-vector<Activation*> activations = {new Relu(), new Relu(), new Linear()};
+### `backProp(vector<double> target)`
+* **What it does:** Computes the gradient (direction and magnitude of error) for every weight and bias in the network. 
+* **How it works:**
+  1. It requires a `target` vector that is the exact same size as the output layer.
+  2. It starts at the final layer, using the selected `Loss` function to calculate the initial error between the network's output and the target.
+  3. It then traverses backward through the network (Backpropagation), applying the chain rule. It calculates the derivative of the activation functions and distributes the error backwards to find exactly how much each weight and neuron contributed to the total loss.
+  4. It **stores these gradients** inside each `Weight` and `Neuron` struct, but it **does not** apply the updates to the weights yet.
 
-// 3. Instantiate Network shell with Loss criteria
-NeuralNetwork nn(topology, new SoftmaxCrossEntropy(), activations);
-
-// 4. Attach Optimizer tracking parameters directly from the network instance
-MomentumSGD optimizer(nn.weights, 0.001, 0.9);
-
-// --- Training Loop Iteration ---
-for (int i = 0; i < trainData.size(); i++) {
-    // Forward propagation step
-    nn.forward(trainData[i].features);
-    
-    // Backpropagation pass calculates local gradients
-    nn.backProp(trainData[i].oneHotLabel);
-    
-    // Optimizer walks weights down the loss gradient curve
-    optimizer.step();
-}
-
-// 5. Serialize model state to disk
-nn.saveNNtoFile("Weights.txt");
-```
+### `sgd.step()`
+* **What it does:** Updates the actual network weights.
+* **How it works:** 1. Now that `backProp` has calculated the gradients, the optimizer steps in. 
+  2. Depending on the optimizer initialized (e.g., standard `SGD` or `MomentumSGD`), it iterates through every weight in the network.
+  3. It subtracts a portion of the gradient (scaled by the learning rate) from the current weight value. If using Momentum, it also factors in the velocity of previous updates to accelerate training and avoid local minima.
 
 ---
 
-## Model Serialization Model File Formats
-When invoking `saveNNtoFile("filename.txt")`, the network saves configuration dimensions and continuous raw weights inside a lightweight structured text schema:
+## 💻 Usage Example
 
-```text
-<total_layers_count>
-<layer_0_size> <layer_1_size> ... <layer_n_size> 
-<raw_weight_value_1>
-<raw_weight_value_2>
-...
+Here is a quick snippet demonstrating how to initialize and train a network using this library:
+
+```cpp
+#include "NeuralNetwork.h" // Assuming you separate into headers later
+
+int main() {
+    // 1. Define Network Architecture: 784 inputs, 256/128 hidden, 10 outputs
+    NeuralNetwork nn({28*28, 256, 128, 10}, 
+                     new SoftmaxCrossEntropy(), 
+                     {new Relu(), new Relu(), new Linear()});
+    
+    // 2. Initialize Optimizer (Momentum SGD with lr=0.001, momentum=0.9)
+    MomentumSGD sgd(nn.weights, 0.001, 0.9);
+
+    // 3. Training Loop (Simplified)
+    vector<double> sampleInput = /* ... load input data ... */;
+    vector<double> targetOutput = /* ... load one-hot target ... */;
+
+    // Forward pass: calculate predictions
+    nn.forward(sampleInput);
+
+    // Backward pass: calculate gradients
+    nn.backProp(targetOutput);
+
+    // Optimizer step: apply weight updates
+    sgd.step();
+
+    // 4. Save model state
+    nn.saveNNtoFile("Weights.txt");
+
+    return 0;
+}
 ```
-This enables rapid data reconstruction later via `NeuralNetwork::loadFromFile("Weights.txt", loss, activations)`.
+
+## Dataset Note
+To run the included `main()` function successfully, ensure you have the standard MNIST dataset files (`train-images-idx3-ubyte`, `train-labels-idx1-ubyte`, etc.) in the same directory as the executable.
