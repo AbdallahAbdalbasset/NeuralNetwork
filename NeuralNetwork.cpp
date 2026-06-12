@@ -420,77 +420,6 @@ void savePGM(const std::vector<double>& image,
     }
 }
 
-vector<double> randomShift(const vector<double>& img, int maxShift, std::mt19937& rng) {
-    std::uniform_int_distribution<int> dist(-maxShift, maxShift);
-    int shiftX = dist(rng);
-    int shiftY = dist(rng);
-
-    // If no shift is determined, return original to save computations
-    if (shiftX == 0 && shiftY == 0) return img;
-
-    vector<double> augmented(784, 0.0); // Initialize with 0.0 (MNIST background color)
-
-    for (int r = 0; r < 28; ++r) {
-        for (int c = 0; c < 28; ++c) {
-            int newR = r + shiftY;
-            int newC = c + shiftX;
-
-            // Only copy pixels that land inside the 28x28 boundary
-            if (newR >= 0 && newR < 28 && newC >= 0 && newC < 28) {
-                augmented[newR * 28 + newC] = img[r * 28 + c];
-            }
-        }
-    }
-    return augmented;
-}
-
-vector<double> addRandomNoise(const vector<double>& img, double maxNoise, std::mt19937& rng) {
-    std::uniform_real_distribution<double> dist(-maxNoise, maxNoise);
-    vector<double> augmented = img;
-
-    for (double& pixel : augmented) {
-        pixel += dist(rng);
-        // Keep pixel values strictly bounded between 0.0 and 1.0
-        if (pixel < 0.0) pixel = 0.0;
-        else if (pixel > 1.0) pixel = 1.0;
-    }
-    return augmented;
-}
-
-vector<double> randomRotation(const vector<double>& img, double maxAngleDegrees, std::mt19937& rng) {
-    std::uniform_real_distribution<double> dist(-maxAngleDegrees, maxAngleDegrees);
-    double angle = dist(rng);
-
-    // If the rotation is virtually zero, skip the math
-    if (std::abs(angle) < 0.5) return img;
-
-    // Convert degrees to radians
-    double radians = angle * M_PI / 180.0;
-    double cosA = std::cos(radians);
-    double sinA = std::sin(radians);
-
-    vector<double> augmented(784, 0.0);
-    double centerX = 13.5;
-    double centerY = 13.5;
-
-    for (int r = 0; r < 28; ++r) {
-        for (int c = 0; c < 28; ++c) {
-            // Center the coordinates
-            double x = c - centerX;
-            double y = r - centerY;
-
-            // Apply inverse rotation matrix
-            int srcC = std::round(x * cosA + y * sinA + centerX);
-            int srcR = std::round(-x * sinA + y * cosA + centerY);
-
-            // Check boundaries
-            if (srcC >= 0 && srcC < 28 && srcR >= 0 && srcR < 28) {
-                augmented[r * 28 + c] = img[srcR * 28 + srcC];
-            }
-        }
-    }
-    return augmented;
-}
 
 
 int main()
@@ -505,38 +434,22 @@ int main()
         "t10k-labels-idx1-ubyte"
     );
 
-    NeuralNetwork nn({28*28, 256, 128, 10}, new MSE(), {new Relu(), new Relu(), new Linear()});
+    NeuralNetwork nn({28*28, 256, 128, 10}, new SoftmaxCrossEntropy(), {new Relu(), new Relu(), new Linear()});
     MomentumSGD sgd(nn.weights, 0.001, 0.9);
 
     std::mt19937 rng(std::random_device{}());
     vector<int> idx(trainData.images.size());
     iota(idx.begin(), idx.end(), 0);
-    for(int epoch = 0; epoch < 20;epoch++){
+    for(int epoch = 0; epoch < 10;epoch++){
         shuffle(idx.begin(), idx.end(), rng);
 
-        // Testing
-        int correct = 0;
-        for(int j = 0;j<testData.images.size();j++){
-            auto res = nn.forward(testData.images[j]);      
-            auto idx = max_element(res.begin(), res.end()) - res.begin();
-            correct += idx == testData.labels[j];
-        }
-        cout<<"Accuracy: " <<100.0*correct/testData.images.size()<<endl;
-
         for(int i = 0;i < trainData.images.size();i++){
-            //vector<double> augmentedImg = trainData.images[idx[i]];
-
-            ////Apply all three safe augmentations sequentially
-            //augmentedImg = randomShift(augmentedImg, 1, rng);       // Shift 1 pixel
-            //augmentedImg = randomRotation(augmentedImg, 12.0, rng); // Rotate up to 12 degrees
-            //augmentedImg = addRandomNoise(augmentedImg, 0.03, rng); // Add 3% noise
-
             nn.forward(trainData.images[idx[i]]);
 
             vector<double> label(10, 0);
             label[trainData.labels[idx[i]]] = 1;
-
             nn.backProp(label);
+
             sgd.step();
         }
 
@@ -558,4 +471,8 @@ int main()
 
     // Save the NN to file
     nn.saveNNtoFile("Weights.txt");
+
+
+    // Compile: g++ -O3 -march=native -ffast-math -std=c++17 NeuralNetwork.cpp -o out
+    // Run: ./out
 }
