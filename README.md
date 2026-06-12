@@ -18,10 +18,9 @@ A lightweight, dependency-free Neural Network library written entirely in C++ fr
 ### 1. Clone the Repository
 To get a local copy up and running, clone the repository using Git:
 ```bash
-git clone [https://github.com/yourusername/your-repo-name.git](https://github.com/yourusername/your-repo-name.git)
-cd your-repo-name
+git clone https://github.com/AbdallahAbdalbasset/NeuralNetwork.git
+cd NeuralNetwork
 ```
-*(Note: Replace `yourusername` and `your-repo-name` with your actual GitHub details).*
 
 ### 2. Compilation
 Because the library heavily relies on matrix multiplications and loops, it is highly recommended to compile with optimization flags. Run the following command in your terminal:
@@ -73,9 +72,9 @@ Here is a quick snippet demonstrating how to initialize and train a network usin
 
 int main() {
     // 1. Define Network Architecture: 784 inputs, 256/128 hidden, 10 outputs
-    NeuralNetwork nn({28*28, 256, 128, 10}, 
-                     new SoftmaxCrossEntropy(), 
-                     {new Relu(), new Relu(), new Linear()});
+    NeuralNetwork nn({28*28, 256, 128, 10}, // Architecture 
+                     new SoftmaxCrossEntropy(), // Loss function
+                     {new Relu(), new Relu(), new Linear()}); // Vector of activations, Each layer can have a different Activation
     
     // 2. Initialize Optimizer (Momentum SGD with lr=0.001, momentum=0.9)
     MomentumSGD sgd(nn.weights, 0.001, 0.9);
