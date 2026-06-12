@@ -1,78 +1,113 @@
 # C++ Neural Network from Scratch
 
-A lightweight, purely object-oriented Artificial Neural Network implemented in C++ from scratch. This implementation uses Stochastic Gradient Descent (SGD) for training and is designed to be easily extensible with custom loss functions and activation layers.
+A lightweight, purely object-oriented, and highly modular Artificial Neural Network implemented in C++ from scratch with zero external dependencies. Designed for efficiency and extensibility, this framework cleanly separates components into decoupled layers, custom activation functions, loss abstractions, and advanced optimization algorithms.
 
-## Initialization
+The included driver application demonstrates the network's capabilities by training on the classic **MNIST Handwritten Digit Dataset**, achieving high-performance execution via aggressive compiler optimizations.
 
-To instantiate the neural network, use the `NeuralNetwork` constructor:
+---
 
-```cpp
-NeuralNetwork nn(layersSize, loss_function, activation_function, learning_rate);
-```
+## Key Features
 
-### Constructor Parameters
+* **Modular Components:** Easily implement and swap custom activation functions, loss metrics, or optimization strategies via clean abstract base classes.
+* **Advanced Optimization:** Includes standard Stochastic Gradient Descent (SGD) and **Momentum-based SGD** to accelerate convergence and navigate tricky error surfaces.
+* **Numerical Stability:** The `SoftmaxCrossEntropy` loss implements the log-sum-exp trick implicitly during propagation to safely handle potential floating-point overflow/underflow.
+* **Serialization:** Full built-in support to save trained network state models (`saveNNtoFile`) and hot-load weights (`loadFromFile`) later for inference.
+* **MNIST Pipeline Built-in:** Includes a raw binary parser for IDX-formatted datasets and a PGM image exporter to visually audit dataset contents.
 
-| Parameter | Type | Description |
+---
+
+## Project Architecture
+
+The library splits network components into clear, intuitive data structures and polymorphic classes:
+
+### Core Data Layout
+* **`Weight` Struct:** Tracks its current value, raw analytical gradient, and historical velocity vector (crucial for momentum calculations).
+* **`Neuron` Struct:** Tracks pre-activation sums (`netVal`), post-activation outputs (`outVal`), and node-level local error gradients (`grad`).
+
+### Class Hierarchy
+| Component | Supported Types | Description |
 | :--- | :--- | :--- |
-| `layersSize` | `vector<int>` | Defines the architecture of the network (Input -> Hidden -> Output). Example: `{2, 4, 5, 1}` creates a network with 2 input nodes, 4-nodes hidden layer, 5-nodes hidden layer and automatically appends a 1-node output layer if it is not explicitly provided. Each layer is fully connected with the next one. Also, Each layer has a single bias. |
-| `loss` | `Loss*` | A pointer to the loss function object (e.g., `new MSE()`). |
-| `activation` | `Activation*` | A pointer to the activation function object (e.g., `new Relu()` or `new Linear()`). |
-| `lr` | `double` | The learning rate for weight updates during Stochastic Gradient Descent. |
+| **`Activation`** | `Linear`, `Relu` | Intercepts node-level sums during forward and backward passes. |
+| **`Loss`** | `MSE`, `SoftmaxCrossEntropy` | Calculates scalar loss evaluations and seeds final layer error configurations. |
+| **`Optimizer`** | `SGD`, `MomentumSGD` | Walks the parameter space using decoupled weight/gradient references. |
 
 ---
 
-## Methods
+## Quick Start & Usage
 
-### `forward`
-```cpp
-double forward(vector<double> input)
-```
-Performs the forward propagation step through the network.
-* **Input:** A `std::vector<double>` representing the features of a single sample. Its size must strictly match the first element of `layersSize`.
-* **Returns:** The final predicted `double` value from the output neuron.
+### 1. Prerequisites
+Before running, ensure you have downloaded the raw MNIST dataset files and placed them directly into the root folder of your project workspace:
+* `train-images-idx3-ubyte` (Training Images)
+* `train-labels-idx1-ubyte` (Training Labels)
+* `t10k-images-idx3-ubyte` (Testing Images)
+* `t10k-labels-idx1-ubyte` (Testing Labels)
 
-### `backProp`
-```cpp
-void backProp(double target)
+### 2. Setup Options
+
+#### Option A: Running the Pre-compiled Binary
+If you are using the pre-compiled executable provided inside the repository workspace, you can execute it immediately:
+
+```bash
+# Give it execution privileges if necessary (Linux/macOS)
+chmod +x out
+
+# Execute the pre-compiled binary
+./out
 ```
-Performs backpropagation using Stochastic Gradient Descent (SGD). It **must** be called immediately after a `forward()` pass.
-* **Input:** A `double` representing the true target value for the last processed sample.
-* **Behavior:** Compares the previous forward pass output to the target, computes the loss gradient, calculates gradients for all layers, and immediately updates the weights.
+
+#### Option B: Compiling from Source
+To compile the implementation files yourself, use the high-performance compilation string optimized for maximum vectorization and hardware optimization:
+
+```bash
+g++ -O3 -march=native -ffast-math -std=c++17 NeuralNetwork.cpp -o out
+./out
+```
 
 ---
 
-## Example Usage: Learning the AND Gate
+## Network Instantiation & Example
 
-Here is a complete example of how to initialize, train, and test the network using a simple dataset.
+The following code details how to structure a network topology using your custom architectural parameters, train it on data matrices, and output model checkpoints:
 
 ```cpp
-#include "bits/stdc++.h"
-// ... (include the provided classes here)
+// 1. Define Topology: 784 Inputs (28x28 pixels), two hidden layers, and 10 Output classes
+vector<int> topology = {784, 256, 128, 10};
 
-int main() {
-    // 1. Prepare the Data (AND Logic Gate)
-    vector<vector<double>> X = {{0, 0}, {0, 1}, {1, 0}, {1, 1}};
-    vector<double> Y = {0, 0, 0, 1};
+// 2. Map Activation instances per layer transition (3 transitions total)
+vector<Activation*> activations = {new Relu(), new Relu(), new Linear()};
 
-    // 2. Create Neural Network
-    // 2 inputs, 1 output. Mean Squared Error loss, ReLU activation, 0.01 learning rate.
-    NeuralNetwork nn({2, 1}, new MSE(), new Relu(), 0.01);
+// 3. Instantiate Network shell with Loss criteria
+NeuralNetwork nn(topology, new SoftmaxCrossEntropy(), activations);
 
-    // 3. Training Loop (Stochastic Gradient Descent)
-    srand(1);
-    for(int i = 0; i < 40000; i++) {
-        int idx = rand() % 4;        // Pick a random sample
-        nn.forward(X[idx]);          // Forward pass
-        nn.backProp(Y[idx]);         // Compute gradients and update weights
-    }
+// 4. Attach Optimizer tracking parameters directly from the network instance
+MomentumSGD optimizer(nn.weights, 0.001, 0.9);
 
-    // 4. Test the Network
-    for(int i = 0; i < 4; i++) {
-        cout << "Sample: " << i + 1 << endl;
-        cout << "Data: (" << X[i][0] << ", " << X[i][1] << ")   Target: " << Y[i] 
-             << "   Prediction: " << nn.forward(X[i]) << endl;
-    }
-
-    return 0;
+// --- Training Loop Iteration ---
+for (int i = 0; i < trainData.size(); i++) {
+    // Forward propagation step
+    nn.forward(trainData[i].features);
+    
+    // Backpropagation pass calculates local gradients
+    nn.backProp(trainData[i].oneHotLabel);
+    
+    // Optimizer walks weights down the loss gradient curve
+    optimizer.step();
 }
+
+// 5. Serialize model state to disk
+nn.saveNNtoFile("Weights.txt");
 ```
+
+---
+
+## Model Serialization Model File Formats
+When invoking `saveNNtoFile("filename.txt")`, the network saves configuration dimensions and continuous raw weights inside a lightweight structured text schema:
+
+```text
+<total_layers_count>
+<layer_0_size> <layer_1_size> ... <layer_n_size> 
+<raw_weight_value_1>
+<raw_weight_value_2>
+...
+```
+This enables rapid data reconstruction later via `NeuralNetwork::loadFromFile("Weights.txt", loss, activations)`.
